@@ -119,7 +119,7 @@ function expandLabel(
     label: Uint8Array,
     context: Uint8Array,
     length: number
-): Promise<Uint8Array> {
+): Uint8Array {
     const customLabel = joinAll([
         encode_number(length, 16),
         encode_vector_8(joinAll([Uint8Array.from(LABELS.OPAQUE), label])),
@@ -134,7 +134,7 @@ function deriveSecret(
     secret: Uint8Array,
     label: Uint8Array,
     transHash: Uint8Array
-): Promise<Uint8Array> {
+): Uint8Array {
     return expandLabel(cfg, secret, label, transHash, cfg.kdf.Nx)
 }
 
@@ -176,33 +176,33 @@ export function tripleDH_IKM(cfg: Config, keys: scalarElt3): Uint8Array {
     return joinAll(ikm)
 }
 
-export async function deriveKeys(
+export function deriveKeys(
     cfg: Config,
     ikm: Uint8Array,
     preamble: Uint8Array
-): Promise<{
+): {
     Km2: Uint8Array
     Km3: Uint8Array
     session_key: Uint8Array
-}> {
+} {
     const nosalt = new Uint8Array(cfg.hash.Nh)
-    const prk = await cfg.kdf.extract(nosalt, ikm)
-    const h_preamble = await cfg.hash.sum(preamble)
-    const handshake_secret = await deriveSecret(
+    const prk = cfg.kdf.extract(nosalt, ikm)
+    const h_preamble = cfg.hash.sum(preamble)
+    const handshake_secret = deriveSecret(
         cfg,
         prk,
         Uint8Array.from(LABELS.HandshakeSecret),
         h_preamble
     )
-    const session_key = await deriveSecret(cfg, prk, Uint8Array.from(LABELS.SessionKey), h_preamble)
+    const session_key = deriveSecret(cfg, prk, Uint8Array.from(LABELS.SessionKey), h_preamble)
     const no_transcript = new Uint8Array()
-    const Km2 = await deriveSecret(
+    const Km2 = deriveSecret(
         cfg,
         handshake_secret,
         Uint8Array.from(LABELS.ServerMAC),
         no_transcript
     )
-    const Km3 = await deriveSecret(
+    const Km3 = deriveSecret(
         cfg,
         handshake_secret,
         Uint8Array.from(LABELS.ClientMAC),

@@ -44,11 +44,11 @@ export class AKE3DHServer {
             { sk: server_private_key, pk: ke1.auth_request.client_public_keyshare },
             { sk: new Uint8Array(server_secret), pk: client_public_key }
         ])
-        const { Km2, Km3, session_key } = await deriveKeys(this.config, ikm, preamble)
-        const h_preamble = await this.config.hash.sum(preamble)
-        const server_mac = await (await this.config.mac.with_key(Km2)).sign(h_preamble)
-        const h_preamble_mac = await this.config.hash.sum(joinAll([preamble, server_mac]))
-        const expected_client_mac = await (await this.config.mac.with_key(Km3)).sign(h_preamble_mac)
+        const { Km2, Km3, session_key } = deriveKeys(this.config, ikm, preamble)
+        const h_preamble = this.config.hash.sum(preamble)
+        const server_mac = this.config.mac.with_key(Km2).sign(h_preamble)
+        const h_preamble_mac = this.config.hash.sum(joinAll([preamble, server_mac]))
+        const expected_client_mac = this.config.mac.with_key(Km3).sign(h_preamble_mac)
         this.expected = new ExpectedAuthResult(this.config, expected_client_mac, session_key)
 
         const auth_response = new AuthResponse(

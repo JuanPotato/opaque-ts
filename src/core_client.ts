@@ -51,17 +51,17 @@ async function expand_keys(
     export_key: Uint8Array
     client_ake_keypair: AKEKeyPair
 }> {
-    const auth_key = await cfg.kdf.expand(
+    const auth_key = cfg.kdf.expand(
         randomized_pwd,
         joinAll([envelope_nonce, Uint8Array.from(LABELS.AuthKey)]),
         cfg.hash.Nh
     )
-    const export_key = await cfg.kdf.expand(
+    const export_key = cfg.kdf.expand(
         randomized_pwd,
         joinAll([envelope_nonce, Uint8Array.from(LABELS.ExportKey)]),
         cfg.hash.Nh
     )
-    const seed = await cfg.kdf.expand(
+    const seed = cfg.kdf.expand(
         randomized_pwd,
         joinAll([envelope_nonce, Uint8Array.from(LABELS.PrivateKey)]),
         cfg.constants.Nseed
@@ -98,9 +98,9 @@ async function store(
         client_identity
     )
     const auth_msg = joinAll([envelope_nonce, Uint8Array.from(cleartext_creds.serialize())])
-    const auth_tag = await (await cfg.mac.with_key(auth_key)).sign(auth_msg)
+    const auth_tag = cfg.mac.with_key(auth_key).sign(auth_msg)
     const envelope = new Envelope(cfg, envelope_nonce, auth_tag)
-    const masking_key = await cfg.kdf.expand(
+    const masking_key = cfg.kdf.expand(
         randomized_pwd,
         Uint8Array.from(LABELS.MaskingKey),
         cfg.hash.Nh
@@ -137,9 +137,9 @@ async function recover(
         client_identity
     )
     const auth_msg = joinAll([envelope.nonce, Uint8Array.from(cleartext_creds.serialize())])
-    const mac = await cfg.mac.with_key(auth_key)
+    const mac = cfg.mac.with_key(auth_key)
 
-    if (!(await mac.verify(auth_msg, envelope.auth_tag))) {
+    if (!mac.verify(auth_msg, envelope.auth_tag)) {
         return new Error('EnvelopeRecoveryError')
     }
     return { client_ake_keypair, export_key }
@@ -172,7 +172,7 @@ export class OpaqueCoreClient {
         const oprf_output = await this.config.oprf.finalize(password, blind, response.evaluation)
         const nosalt = new Uint8Array(this.config.hash.Nh)
         const stretched_oprf_output = this.ksf.harden(oprf_output)
-        const randomized_pwd = await this.config.kdf.extract(
+        const randomized_pwd = this.config.kdf.extract(
             nosalt,
             joinAll([oprf_output, stretched_oprf_output])
         )
@@ -212,17 +212,14 @@ export class OpaqueCoreClient {
     > {
         const y = await this.config.oprf.finalize(password, blind, response.evaluation)
         const nosalt = new Uint8Array(this.config.hash.Nh)
-        const randomized_pwd = await this.config.kdf.extract(
-            nosalt,
-            joinAll([y, this.ksf.harden(y)])
-        )
-        const masking_key = await this.config.kdf.expand(
+        const randomized_pwd = this.config.kdf.extract(nosalt, joinAll([y, this.ksf.harden(y)]))
+        const masking_key = this.config.kdf.expand(
             randomized_pwd,
             Uint8Array.from(LABELS.MaskingKey),
             this.config.hash.Nh
         )
         const Ne = Envelope.sizeSerialized(this.config)
-        const credential_response_pad = await this.config.kdf.expand(
+        const credential_response_pad = this.config.kdf.expand(
             masking_key,
             joinAll([response.masking_nonce, Uint8Array.from(LABELS.CredentialResponsePad)]),
             this.config.ake.Npk + Ne

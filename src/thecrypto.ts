@@ -3,16 +3,20 @@
 // Licensed under the BSD-3-Clause license found in the LICENSE file or
 // at https://opensource.org/licenses/BSD-3-Clause
 
-import { ctEqual, joinAll } from './util.js'
+import { ctEqual } from './util.js'
 
-import { scrypt } from '@noble/hashes/scrypt'
+import { scrypt } from '@noble/hashes/scrypt.js'
+import { sha1 } from '@noble/hashes/legacy.js'
+import { sha256, sha384, sha512 } from '@noble/hashes/sha2.js'
+import { extract, expand } from '@noble/hashes/hkdf.js'
+import { hmac } from '@noble/hashes/hmac.js'
+import type { CHash } from '@noble/hashes/utils.js'
 
 export interface PrngFn {
     random(numBytes: number): number[]
 }
 
 export class Prng implements PrngFn {
-    /* eslint-disable-next-line class-methods-use-this */
     random(numBytes: number): number[] {
         return Array.from(crypto.getRandomValues(new Uint8Array(numBytes)))
     }
@@ -21,33 +25,38 @@ export class Prng implements PrngFn {
 export interface HashFn {
     name: string
     Nh: number //  Nh: The output size of the Hash function in bytes.
-    sum(msg: Uint8Array): Promise<Uint8Array>
+    sum(msg: Uint8Array): Uint8Array
 }
 
 export class Hash implements HashFn {
     readonly Nh: number
+    readonly nobleFn: CHash
 
     constructor(public readonly name: string) {
         switch (name) {
             case Hash.ID.SHA1:
                 this.Nh = 20
+                this.nobleFn = sha1
                 break
             case Hash.ID.SHA256:
                 this.Nh = 32
+                this.nobleFn = sha256
                 break
             case Hash.ID.SHA384:
                 this.Nh = 48
+                this.nobleFn = sha384
                 break
             case Hash.ID.SHA512:
                 this.Nh = 64
+                this.nobleFn = sha512
                 break
             default:
                 throw new Error(`invalid hash name: ${name}`)
         }
     }
 
-    async sum(msg: Uint8Array): Promise<Uint8Array> {
-        return new Uint8Array(await crypto.subtle.digest(this.name, msg))
+    sum(msg: Uint8Array): Uint8Array {
+        return this.nobleFn(msg)
     }
 }
 
@@ -63,78 +72,65 @@ export namespace Hash {
 }
 
 export interface MACOps {
-    sign(msg: Uint8Array): Promise<Uint8Array>
-    verify(msg: Uint8Array, output: Uint8Array): Promise<boolean>
+    sign(msg: Uint8Array): Uint8Array
+    verify(msg: Uint8Array, output: Uint8Array): boolean
 }
 
 export interface MACFn {
     Nm: number // The output size of the MAC() function in bytes.
-    with_key(key: Uint8Array): Promise<MACOps>
+    with_key(key: Uint8Array): MACOps
 }
 
 export class Hmac implements MACFn {
     readonly Nm: number
+    readonly hashFn: CHash
 
-    constructor(private readonly hash: string) {
+    constructor(public hash: string) {
         this.Nm = new Hash(hash).Nh
+        this.hashFn = new Hash(hash).nobleFn
     }
 
-    async with_key(key: Uint8Array): Promise<MACOps> {
-        return new Hmac.Macops(
-            await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: this.hash }, false, [
-                'sign'
-            ])
-        )
+    with_key(key: Uint8Array): MACOps {
+        return new Hmac.Macops(key, this.hashFn)
     }
 
     private static Macops = class implements MACOps {
-        constructor(private readonly crypto_key: CryptoKey) {}
+        constructor(
+            private readonly key: Uint8Array,
+            private readonly hash: CHash
+        ) {}
 
-        async sign(msg: Uint8Array): Promise<Uint8Array> {
-            return new Uint8Array(
-                await crypto.subtle.sign(this.crypto_key.algorithm.name, this.crypto_key, msg)
-            )
+        sign(msg: Uint8Array): Uint8Array {
+            return hmac(this.hash, this.key, msg)
         }
 
-        async verify(msg: Uint8Array, output: Uint8Array): Promise<boolean> {
-            return ctEqual(output, await this.sign(msg))
+        verify(msg: Uint8Array, output: Uint8Array): boolean {
+            return ctEqual(output, this.sign(msg))
         }
     }
 }
 
 export interface KDFFn {
     Nx: number // The output size of the Extract() function in bytes.
-    extract(salt: Uint8Array, ikm: Uint8Array): Promise<Uint8Array>
-    expand(prk: Uint8Array, info: Uint8Array, lenBytes: number): Promise<Uint8Array>
+    extract(salt: Uint8Array, ikm: Uint8Array): Uint8Array
+    expand(prk: Uint8Array, info: Uint8Array, lenBytes: number): Uint8Array
 }
 
 export class Hkdf implements KDFFn {
     readonly Nx: number
+    readonly hashFn: CHash
 
     constructor(public hash: string) {
-        this.Nx = new Hmac(hash).Nm
+        this.Nx = new Hash(hash).Nh
+        this.hashFn = new Hash(hash).nobleFn
     }
 
-    async extract(salt: Uint8Array, ikm: Uint8Array): Promise<Uint8Array> {
-        if (salt.length === 0) {
-            salt = new Uint8Array(this.Nx)
-        }
-        return (await new Hmac(this.hash).with_key(salt)).sign(ikm)
+    extract(salt: Uint8Array, ikm: Uint8Array): Uint8Array {
+        return extract(this.hashFn, ikm, salt)
     }
 
-    async expand(prk: Uint8Array, info: Uint8Array, lenBytes: number): Promise<Uint8Array> {
-        const hashLen = new Hash(this.hash).Nh
-        const N = Math.ceil(lenBytes / hashLen)
-        const T = new Uint8Array(N * hashLen)
-        const hm = await new Hmac(this.hash).with_key(prk)
-        let Ti = new Uint8Array()
-        let offset = 0
-        for (let i = 0; i < N; i++) {
-            Ti = await hm.sign(joinAll([Ti, info, Uint8Array.of(i + 1)])) // eslint-disable-line no-await-in-loop
-            T.set(Ti, offset)
-            offset += hashLen
-        }
-        return T.slice(0, lenBytes)
+    expand(prk: Uint8Array, info: Uint8Array, lenBytes: number): Uint8Array {
+        return expand(this.hashFn, prk, info, lenBytes)
     }
 }
 

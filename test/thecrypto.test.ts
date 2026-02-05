@@ -16,9 +16,9 @@ describe.each(vectors)('HKDF', (vector: (typeof vectors)[number]) => {
     const info = fromHex(vector.info)
     const len = vector.length
 
-    test(`${vector.name}/${vector.hash}`, async () => {
-        const prk = await hkdf.extract(salt, ikm)
-        const okm = await hkdf.expand(prk, info, len)
+    test(`${vector.name}/${vector.hash}`, () => {
+        const prk = hkdf.extract(salt, ikm)
+        const okm = hkdf.expand(prk, info, len)
         expect(toHex(prk)).toEqual(vector.PRK)
         expect(toHex(okm)).toEqual(vector.OKM)
     })

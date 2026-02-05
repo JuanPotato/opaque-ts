@@ -169,7 +169,7 @@ export class OpaqueClient implements RegistrationClient, AuthClient {
         }
 
         const { client_ake_keypair, server_public_key, export_key } = rec
-        const fin = await this.ake.finalize(
+        const fin = this.ake.finalize(
             client_identity_u8array ? client_identity_u8array : client_ake_keypair.public_key,
             client_ake_keypair.private_key,
             server_identity_u8array ? server_identity_u8array : server_public_key,
@@ -189,7 +189,7 @@ export class OpaqueClient implements RegistrationClient, AuthClient {
 
     private clean(): void {
         this.status = OpaqueClient.States.NEW
-        this.password = undefined // eslint-disable-line no-undefined
-        this.blind = undefined // eslint-disable-line no-undefined
+        this.password = undefined
+        this.blind = undefined
     }
 }

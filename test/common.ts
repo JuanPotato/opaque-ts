@@ -69,6 +69,7 @@ export function expectNotError<T>(value: T | Error): asserts value is T {
     expect(value).not.toBeInstanceOf(Error)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
 export function expectToBeError<T>(value: T | Error): asserts value is Error {
     expect(value).toBeInstanceOf(Error)
 }

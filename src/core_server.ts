@@ -24,7 +24,7 @@ export class OpaqueCoreServer {
         blinded: Uint8Array,
         credential_identifier: Uint8Array
     ): Promise<Uint8Array> {
-        const oprf_key_seed = await this.config.kdf.expand(
+        const oprf_key_seed = this.config.kdf.expand(
             this.oprf_seed,
             joinAll([credential_identifier, Uint8Array.from(LABELS.OprfKey)]),
             this.config.constants.Nseed
@@ -51,7 +51,7 @@ export class OpaqueCoreServer {
         const evaluation = await this.doOPRFEvaluation(request.data, credential_identifier)
         const masking_nonce = new Uint8Array(this.config.prng.random(this.config.constants.Nn))
         const Ne = Envelope.sizeSerialized(this.config)
-        const credential_response_pad = await this.config.kdf.expand(
+        const credential_response_pad = this.config.kdf.expand(
             record.masking_key,
             joinAll([masking_nonce, Uint8Array.from(LABELS.CredentialResponsePad)]),
             this.config.ake.Npk + Ne

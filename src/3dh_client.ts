@@ -32,20 +32,19 @@ export class AKE3DHClient {
         return ke1
     }
 
-    async finalize(
+    finalize(
         client_identity: Uint8Array,
         client_private_key: Uint8Array,
         server_identity: Uint8Array,
         server_public_key: Uint8Array,
         ke2: KE2,
         context: Uint8Array
-    ): Promise<
+    ):
         | {
               auth_finish: AuthFinish
               session_key: Uint8Array
           }
-        | Error
-    > {
+        | Error {
         if (!this.client_secret || !this.ke1) {
             return new Error('ake3dhclient has not started yet')
         }
@@ -64,21 +63,15 @@ export class AKE3DHClient {
             ke2.auth_response.server_public_keyshare,
             context
         )
-        const { Km2, Km3, session_key } = await deriveKeys(this.config, ikm, preamble)
-        const h_preamble = await this.config.hash.sum(preamble)
+        const { Km2, Km3, session_key } = deriveKeys(this.config, ikm, preamble)
+        const h_preamble = this.config.hash.sum(preamble)
 
-        if (
-            !(await (
-                await this.config.mac.with_key(Km2)
-            ).verify(h_preamble, ke2.auth_response.server_mac))
-        ) {
+        if (!this.config.mac.with_key(Km2).verify(h_preamble, ke2.auth_response.server_mac)) {
             return new Error('handshake error')
         }
 
-        const hmacData = await this.config.hash.sum(
-            joinAll([preamble, ke2.auth_response.server_mac])
-        )
-        const client_mac = await (await this.config.mac.with_key(Km3)).sign(hmacData)
+        const hmacData = this.config.hash.sum(joinAll([preamble, ke2.auth_response.server_mac]))
+        const client_mac = this.config.mac.with_key(Km3).sign(hmacData)
         const auth_finish = new AuthFinish(this.config, client_mac)
 
         return { auth_finish, session_key }
