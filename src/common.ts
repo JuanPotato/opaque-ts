@@ -82,7 +82,7 @@ export class OPRFBaseMode implements OPRFFn {
 
     async evaluate(key: Uint8Array, blinded: Uint8Array): Promise<Uint8Array> {
         const server = new OPRFServer(this.id, key)
-        const deserBlinded = server.gg.desElt(blinded)
+        const deserBlinded = server.group.desElt(blinded)
         const evalReq = new EvaluationRequest([deserBlinded])
         const evaluations = await server.blindEvaluate(evalReq)
         return evaluations.evaluated[0].serialize()
@@ -94,8 +94,8 @@ export class OPRFBaseMode implements OPRFFn {
         evaluationBytes: Uint8Array
     ): Promise<Uint8Array> {
         const client = new OPRFClient(this.id)
-        const deserEval = client.gg.desElt(evaluationBytes)
-        const blindSc = client.gg.desScalar(blind)
+        const deserEval = client.group.desElt(evaluationBytes)
+        const blindSc = client.group.desScalar(blind)
         const finData = new FinalizeData([input], [blindSc], new EvaluationRequest([]))
         const evaluation = new Evaluation(client.mode, [deserEval])
         const outputs = await client.finalize(finData, evaluation)
